@@ -250,11 +250,11 @@ jobs:
         with:
           github_token: ${{ steps.fork-token.outputs.token }}
           claude_code_oauth_token: ${{ secrets.claude_code_oauth_token }}
-          claude_args: --max-turns 80
+          claude_args: --max-turns 120
           show_full_output: true
           # Allow Claude to run git/gh commands, read/write files for conflict
           # resolution and fork/main rebuild.
-          settings: '{"permissions":{"allow":["Bash(git *)","Bash(gh *)","Bash(cat *)","Bash(sed *)","Bash(grep *)","Bash(wc *)","Read","Write","Edit"]}}'
+          settings: '{"permissions":{"allow":["Bash(git *)","Bash(gh *)","Bash(cat *)","Bash(sed *)","Bash(grep *)","Bash(wc *)","Bash(echo *)","Bash(env *)","Bash(printf *)","Bash(curl *)","Bash(python3 *)","Read","Write","Edit"]}}'
           prompt: |
             You are maintaining a patch stack fork of ${{ inputs.upstream_repo }}.
 
@@ -294,6 +294,22 @@ jobs:
 
             /tmp/sorted_branches.txt contains ALL active patch branches in topological
             order (one per line) — use this for rebuilding ${{ inputs.fork_main }}.
+
+            PR metadata for each branch `<branch>` is available in temp files:
+              /tmp/meta_title_<safe>  — PR title
+              /tmp/meta_num_<safe>    — PR number
+              /tmp/meta_url_<safe>    — PR URL
+              /tmp/meta_body_<safe>   — PR body
+            where `<safe>` = branch name with `/` replaced by `_`.
+            Example: branch `patch/fix-config` → `/tmp/meta_title_patch_fix-config`
+
+            **Always read these files for PR info.** Do not call gh/curl to look up
+            PR numbers — the metadata files are authoritative and the default
+            GH_TOKEN may not have access to the upstream repo.
+
+            To run `gh` commands against the upstream repo, prefix with
+            `env GH_TOKEN="$UPSTREAM_GH_TOKEN"`. The default GH_TOKEN only
+            works for the fork repo.
 
             /tmp/preserved_main_commits.txt contains zero or more commit SHAs from the
             old ${{ inputs.fork_main }} that are local-only and must be preserved.
