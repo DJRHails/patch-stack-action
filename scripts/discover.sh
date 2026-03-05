@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Discover patch/* branches and classify them as active, merged, or superseded.
+# Discover patch/* branches and classify them as active or merged.
 #
 # Requires env: GH_TOKEN, UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_OWNER
-# Outputs (via GITHUB_OUTPUT): merged_patches, superseded_patches
+# Outputs (via GITHUB_OUTPUT): merged_patches
 # Side effects: writes /tmp/sorted_branches.txt, /tmp/meta_* files
 
 # shellcheck source=lib.sh
@@ -46,7 +46,7 @@ mapfile -t all_branches < <(
 )
 echo "Found ${#all_branches[@]} patch branch(es): ${all_branches[*]:-none}"
 
-active=() merged=() superseded=()
+active=() merged=()
 
 for branch in "${all_branches[@]}"; do
   # Look up the PR for this branch on the upstream repo.
@@ -91,21 +91,6 @@ for branch in "${all_branches[@]}"; do
     continue
   fi
 
-  # Heuristic: check if the patch's own changes are already in upstream.
-  # Get the diff of what this branch adds on top of its original base,
-  # then test if those changes can be applied (already present) on upstream.
-  merge_base=$(git merge-base "upstream/$UPSTREAM_BRANCH" "$branch" \
-    2>/dev/null || echo "")
-  if [[ -n "$merge_base" ]]; then
-    patch_diff=$(git diff "$merge_base" "$branch" -- 2>/dev/null || true)
-    if [[ -n "$patch_diff" ]] && \
-       echo "$patch_diff" | git apply --check --reverse 2>/dev/null; then
-      echo "  SUPERSEDED (changes already in upstream): $branch"
-      superseded+=("$branch")
-      continue
-    fi
-  fi
-
   echo "  ACTIVE (${unique_commits} commit(s)): $branch"
   active+=("$branch")
 done
@@ -123,9 +108,6 @@ cat /tmp/sorted_branches.txt || true
 # Write outputs
 printf '%s\n' "${merged[@]+"${merged[@]}"}" \
   | paste -sd ',' - > /tmp/out_merged.txt
-printf '%s\n' "${superseded[@]+"${superseded[@]}"}" \
-  | paste -sd ',' - > /tmp/out_superseded.txt
 {
   echo "merged_patches=$(cat /tmp/out_merged.txt)"
-  echo "superseded_patches=$(cat /tmp/out_superseded.txt)"
 } >> "$GITHUB_OUTPUT"

@@ -157,18 +157,6 @@ jobs:
           MERGED_PATCHES: ${{ steps.discover.outputs.merged_patches }}
         run: bash .patch-stack-action/scripts/cleanup-merged.sh
 
-      # ── Handle superseded patches ─────────────────────────────────────────
-      # Close the upstream PR and rename branch patch/* -> archived/*
-      - name: Close and archive superseded patches
-        if: steps.discover.outputs.superseded_patches != ''
-        shell: bash
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          UPSTREAM_REPO: ${{ inputs.upstream_repo }}
-          UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
-          DRY_RUN: ${{ inputs.dry_run }}
-          SUPERSEDED_PATCHES: ${{ steps.discover.outputs.superseded_patches }}
-        run: bash .patch-stack-action/scripts/cleanup-superseded.sh
 
       # ── Rebase each patch branch ──────────────────────────────────────────
       - name: Rebase patch branches onto their parents
@@ -267,7 +255,7 @@ jobs:
 
             5. Write a markdown summary to /tmp/claude_summary.md:
                - Branches resolved cleanly (list)
-               - Branches closed as superseded (list + reason)
+               - Branches closed as superseded (list + reason, if any)
                - Any remaining issues
 
       # ── Summary ───────────────────────────────────────────────────────────
@@ -281,7 +269,6 @@ jobs:
           FORK_MAIN: ${{ inputs.fork_main }}
           DRY_RUN: ${{ inputs.dry_run }}
           MERGED_PATCHES: ${{ steps.discover.outputs.merged_patches }}
-          SUPERSEDED_PATCHES: ${{ steps.discover.outputs.superseded_patches }}
           NEEDS_CLAUDE: ${{ steps.rebase.outputs.needs_claude }}
         run: bash .patch-stack-action/scripts/summary.sh
 

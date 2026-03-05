@@ -2,7 +2,7 @@
 # Write the GitHub Actions job summary.
 #
 # Requires env: UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_REPO, FORK_MAIN,
-#               DRY_RUN, MERGED_PATCHES, SUPERSEDED_PATCHES, NEEDS_CLAUDE
+#               DRY_RUN, MERGED_PATCHES, NEEDS_CLAUDE
 
 set -euo pipefail
 
@@ -17,13 +17,6 @@ set -euo pipefail
   if [[ -n "$MERGED_PATCHES" ]]; then
     echo "## Merged upstream (branches deleted)"
     echo "$MERGED_PATCHES" | tr ',' '\n' \
-      | while read -r b; do [[ -n "$b" ]] && echo "- \`$b\`"; done
-    echo ""
-  fi
-
-  if [[ -n "$SUPERSEDED_PATCHES" ]]; then
-    echo "## Superseded (PRs closed, branches archived)"
-    echo "$SUPERSEDED_PATCHES" | tr ',' '\n' \
       | while read -r b; do [[ -n "$b" ]] && echo "- \`$b\`"; done
     echo ""
   fi
