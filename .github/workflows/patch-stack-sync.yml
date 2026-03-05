@@ -236,7 +236,9 @@ jobs:
             3. DECISION — pick exactly one:
 
                **SUPERSEDED** — upstream has fully accomplished the PR's goal:
-                 a. `gh pr comment <number> --repo ${{ inputs.upstream_repo }} --body "..."`
+                 a. Identify the upstream commit(s) that accomplished the goal.
+                 b. `gh pr comment <number> --repo ${{ inputs.upstream_repo }} --body "..."`
+                    Include the upstream commit SHA(s) that supersede this PR.
                     (may fail if app is not installed on upstream — log a warning and continue)
                  b. `gh pr close <number> --repo ${{ inputs.upstream_repo }}`
                     (may fail if app is not installed on upstream — log a warning and continue)
