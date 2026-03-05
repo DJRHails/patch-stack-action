@@ -197,6 +197,32 @@ After the first successful run, your fork's `main` will be rebuilt as `upstream/
 - **Use dependency chains sparingly** — `patch/a--b--c` means all three must succeed; a conflict in `a` blocks `b` and `c`
 - **Write clear PR descriptions** — Claude Code reads these to understand intent when resolving conflicts
 
+## Local simulations
+
+For shell-script edge cases, there is a local harness that creates temporary bare repos and runs the workflow scripts against them without GitHub access:
+
+```bash
+bash scripts/dev/local-simulations.sh
+```
+
+Run a single scenario by name:
+
+```bash
+bash scripts/dev/local-simulations.sh rename
+bash scripts/dev/local-simulations.sh collapse
+bash scripts/dev/local-simulations.sh empty
+```
+
+Current scenarios cover:
+
+- descendant branch collapse after a merged parent (`patch/merged-pr--child-pr` → `patch/child-pr`)
+- multi-level collapse when several ancestors are merged
+- empty-after-rebase patches that should not fail the `fork/main` rebuild
+
+The harness uses a fake local `gh` binary to emulate branch rename API calls and asserts on the resulting local and bare-remote refs.
+
+Workflow runtime scripts live in [`scripts/workflow/`](/Users/dh/projects/github.com/DJRHails/patch-stack-action/scripts/workflow), while developer-only tooling lives in [`scripts/dev/`](/Users/dh/projects/github.com/DJRHails/patch-stack-action/scripts/dev).
+
 ## Notes on Claude Code auth
 
 `claude-code-action` defaults to OIDC token exchange for GitHub auth. This **fails on cron-triggered runs** with a 401. We bypass it by passing the pre-generated App token directly as `github_token` — Claude Code then uses that instead of attempting OIDC.

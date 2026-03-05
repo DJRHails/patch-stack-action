@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Discover patch/* branches and classify them as active or merged.
 #
-# Requires env: GH_TOKEN, UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_OWNER
+# Requires env: UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_OWNER
 # Outputs (via GITHUB_OUTPUT): merged_patches
-# Side effects: writes /tmp/sorted_branches.txt, /tmp/meta_* files
+# Side effects: writes /tmp/active_branches.txt, /tmp/sorted_branches.txt, /tmp/meta_* files
 
-# shellcheck source=lib.sh
+# shellcheck source=workflow/lib.sh
 source "$(dirname "$0")/lib.sh"
 
 topo_sort() {
   # Repeatedly emit branches whose parent has already been emitted
-  local -a remaining=("$@") sorted=()
+  local -a active_branches=("$@") remaining=("$@") sorted=()
   local -a emitted=("upstream/$UPSTREAM_BRANCH")
   local pass=0 max=$(( ${#remaining[@]} + 1 ))
   while [[ ${#remaining[@]} -gt 0 && $pass -lt $max ]]; do
@@ -18,7 +18,7 @@ topo_sort() {
     local -a next=()
     for b in "${remaining[@]}"; do
       local parent
-      parent=$(get_parent "$b")
+      parent=$(get_effective_parent "$b" "${active_branches[@]}")
       local found=false
       for e in "${emitted[@]}"; do
         [[ "$e" == "$parent" ]] && { found=true; break; }
@@ -40,6 +40,25 @@ topo_sort() {
   printf '%s\n' "${sorted[@]}"
 }
 
+fetch_pr_json() {
+  local branch="$1"
+  local url
+  url="https://api.github.com/repos/${UPSTREAM_REPO}/pulls?state=all&head=${FORK_OWNER}:${branch}&per_page=1"
+
+  local -a curl_args=(
+    --silent
+    --show-error
+    --fail
+    -H "Accept: application/vnd.github+json"
+    -H "X-GitHub-Api-Version: 2022-11-28"
+  )
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    curl_args+=(-H "Authorization: Bearer ${GH_TOKEN}")
+  fi
+
+  curl "${curl_args[@]}" "$url"
+}
+
 # Collect all patch/* branches present on origin
 mapfile -t all_branches < <(
   git branch --list 'patch/*' | sed 's/^[* ]*//' | sort
@@ -50,20 +69,11 @@ active=() merged=()
 
 for branch in "${all_branches[@]}"; do
   # Look up the PR for this branch on the upstream repo.
-  # Try cross-fork format (owner:branch) first, then same-repo (branch only).
   pr_json='[]'
-  for head_ref in "${FORK_OWNER}:${branch}" "${branch}"; do
-    if candidate=$(gh pr list \
-      --repo "$UPSTREAM_REPO" \
-      --head "$head_ref" \
-      --state all \
-      --limit 1 \
-      --json number,state,url,title,body \
-      2>/dev/null) && [[ "$(echo "$candidate" | jq 'length')" -gt 0 ]]; then
-      pr_json="$candidate"
-      break
-    fi
-  done
+  if candidate=$(fetch_pr_json "$branch" 2>/dev/null) \
+    && [[ "$(echo "$candidate" | jq 'length')" -gt 0 ]]; then
+    pr_json="$candidate"
+  fi
   if [[ "$pr_json" == "[]" ]]; then
     echo "::warning::No PR found for ${branch} on ${UPSTREAM_REPO}"
   fi
@@ -94,6 +104,12 @@ for branch in "${all_branches[@]}"; do
   echo "  ACTIVE (${unique_commits} commit(s)): $branch"
   active+=("$branch")
 done
+
+if [[ ${#active[@]} -gt 0 ]]; then
+  printf '%s\n' "${active[@]}" > /tmp/active_branches.txt
+else
+  : > /tmp/active_branches.txt
+fi
 
 # Topologically sort active branches and persist order
 if [[ ${#active[@]} -gt 0 ]]; then

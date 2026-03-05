@@ -2,14 +2,18 @@
 # Rebase each active patch branch onto its parent. If all rebases succeed,
 # rebuild fork/main as upstream + squash-merged patches.
 #
-# Requires env: GH_TOKEN, DRY_RUN, UPSTREAM_BRANCH, FORK_MAIN
+# Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_MAIN
 # Outputs (via GITHUB_OUTPUT): needs_claude
 
-# shellcheck source=lib.sh
+# shellcheck source=workflow/lib.sh
 source "$(dirname "$0")/lib.sh"
 
 needs_claude=false
 echo "[]" > /tmp/conflicts.json
+active_branches=()
+if [[ -f /tmp/active_branches.txt ]]; then
+  mapfile -t active_branches < /tmp/active_branches.txt
+fi
 
 add_conflict() {
   local branch="$1" parent="$2" files="$3"
@@ -25,7 +29,7 @@ add_conflict() {
 
 while IFS= read -r branch || [[ -n "$branch" ]]; do
   [[ -z "$branch" ]] && continue
-  parent=$(get_parent "$branch")
+  parent=$(get_effective_parent "$branch" "${active_branches[@]}")
   safe="${branch//\//_}"
   pr_url=$(cat   "/tmp/meta_url_${safe}"   2>/dev/null || echo "")
   pr_title=$(cat "/tmp/meta_title_${safe}" 2>/dev/null || echo "")
@@ -54,8 +58,6 @@ while IFS= read -r branch || [[ -n "$branch" ]]; do
   fi
 done < /tmp/sorted_branches.txt
 
-echo "needs_claude=${needs_claude}" >> "$GITHUB_OUTPUT"
-
 # If no conflicts, rebuild fork/main now (Claude will do it otherwise)
 if ! $needs_claude && [[ "$DRY_RUN" != "true" ]]; then
   echo ""
@@ -74,14 +76,18 @@ if ! $needs_claude && [[ "$DRY_RUN" != "true" ]]; then
     # --squash stages all changes without creating a merge commit,
     # then we create one labelled commit per patch.
     if git merge --squash "$branch" --quiet 2>/tmp/squash_err.txt; then
-      if [[ -n "$pr_title" && -n "$pr_num" ]]; then
-        msg="${pr_title} (#${pr_num})"
+      if git diff --cached --quiet; then
+        echo "    No staged changes after squash; skipping empty patch"
       else
-        msg="${branch#patch/}"
+        if [[ -n "$pr_title" && -n "$pr_num" ]]; then
+          msg="${pr_title} (#${pr_num})"
+        else
+          msg="${branch#patch/}"
+        fi
+        [[ -n "$pr_url" ]] && msg="${msg}\n\nUpstream PR: ${pr_url}"
+        git commit -m "$(printf '%b' "$msg")" --quiet
+        echo "    Done"
       fi
-      [[ -n "$pr_url" ]] && msg="${msg}\n\nUpstream PR: ${pr_url}"
-      git commit -m "$(printf '%b' "$msg")" --quiet
-      echo "    Done"
     else
       echo "::error::Squash merge failed for $branch -- queueing for Claude"
       cat /tmp/squash_err.txt
@@ -95,6 +101,7 @@ if ! $needs_claude && [[ "$DRY_RUN" != "true" ]]; then
   if ! $needs_claude; then
     git push --force-with-lease origin "$FORK_MAIN" --quiet
     echo "$FORK_MAIN rebuilt and pushed"
-    echo "needs_claude=false" >> "$GITHUB_OUTPUT"
   fi
 fi
+
+echo "needs_claude=${needs_claude}" >> "$GITHUB_OUTPUT"

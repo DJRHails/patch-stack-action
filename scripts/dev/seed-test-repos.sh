@@ -9,7 +9,7 @@
 #   - PRs on upstream for each patch
 #   - Upstream evolution (merge, conflict, supersede)
 #
-# Usage: bash scripts/seed-test-repos.sh [--skip-cleanup]
+# Usage: bash scripts/dev/seed-test-repos.sh [--skip-cleanup]
 #
 # Requires: gh CLI authenticated, git
 

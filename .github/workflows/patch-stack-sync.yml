@@ -128,7 +128,7 @@ jobs:
           repository: DJRHails/patch-stack-action
           ref: ${{ github.workflow_sha }}
           path: .patch-stack-action
-          sparse-checkout: scripts
+          sparse-checkout: scripts/workflow
           persist-credentials: false
 
       - name: Configure git identity and origin auth
@@ -176,7 +176,7 @@ jobs:
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
-        run: bash .patch-stack-action/scripts/discover.sh
+        run: bash .patch-stack-action/scripts/workflow/discover.sh
 
       # ── Handle merged patches ─────────────────────────────────────────────
       - name: Delete merged patch branches
@@ -187,7 +187,7 @@ jobs:
           GH_TOKEN: ${{ steps.fork-token.outputs.token }}
           FORK_REPO: ${{ inputs.fork_repo }}
           MERGED_PATCHES: ${{ steps.discover.outputs.merged_patches }}
-        run: bash .patch-stack-action/scripts/cleanup-merged.sh
+        run: bash .patch-stack-action/scripts/workflow/cleanup-merged.sh
 
       - name: Refresh patch metadata after cleanup
         if: steps.discover.outputs.merged_patches != ''
@@ -197,7 +197,7 @@ jobs:
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
-        run: bash .patch-stack-action/scripts/discover.sh
+        run: bash .patch-stack-action/scripts/workflow/discover.sh
 
 
       # ── Rebase each patch branch ──────────────────────────────────────────
@@ -208,7 +208,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_MAIN: ${{ inputs.fork_main }}
-        run: bash .patch-stack-action/scripts/rebase.sh
+        run: bash .patch-stack-action/scripts/workflow/rebase.sh
 
       # ── Claude Code conflict resolution ───────────────────────────────────
       # Only runs when rebase produced conflicts.
@@ -330,7 +330,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           MERGED_PATCHES: ${{ steps.discover.outputs.merged_patches }}
           NEEDS_CLAUDE: ${{ steps.rebase.outputs.needs_claude }}
-        run: bash .patch-stack-action/scripts/summary.sh
+        run: bash .patch-stack-action/scripts/workflow/summary.sh
 
       # ── Cleanup ─────────────────────────────────────────────────────────
       # Revoke the App installation token so it can't be reused if leaked.
