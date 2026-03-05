@@ -56,6 +56,7 @@ reset_tmp_state() {
     /tmp/rebase_err.txt \
     /tmp/sorted_branches.txt \
     /tmp/squash_err.txt \
+    /tmp/upstream_sync_err.txt \
     /tmp/meta_*
 }
 
@@ -242,17 +243,26 @@ scenario_empty_after_rebase() {
   (
     cd "$work_dir"
 
-    git branch upstream/main main
-    git checkout -q -b patch/already-applied upstream/main
+    git update-ref refs/remotes/upstream/main "$(git rev-parse main)"
+    DRY_RUN=false \
+      UPSTREAM_BRANCH=main \
+      FORK_UPSTREAM_BRANCH=upstream \
+      bash "$ROOT_DIR/scripts/workflow/sync-upstream-branch.sh"
+    git checkout -q -b patch/already-applied refs/remotes/upstream/main
     printf 'base\nfeature\n' > app.txt
     git commit -qam 'patch change'
     git push -q origin HEAD
 
     git checkout -q main
-    git checkout -q upstream/main
+    git checkout -q refs/remotes/upstream/main
     printf 'base\nfeature\n' > app.txt
     git commit -qam 'upstream equivalent change'
+    git update-ref refs/remotes/upstream/main "$(git rev-parse HEAD)"
     git push -q origin HEAD:main
+    DRY_RUN=false \
+      UPSTREAM_BRANCH=main \
+      FORK_UPSTREAM_BRANCH=upstream \
+      bash "$ROOT_DIR/scripts/workflow/sync-upstream-branch.sh"
     git checkout -q main
 
     printf 'patch/already-applied\n' > /tmp/active_branches.txt
@@ -265,6 +275,7 @@ scenario_empty_after_rebase() {
     DRY_RUN=false \
       UPSTREAM_BRANCH=main \
       FORK_MAIN=main \
+      FORK_UPSTREAM_BRANCH=upstream \
       bash "$ROOT_DIR/scripts/workflow/rebase.sh"
 
     main_subject=$(git log -1 --format=%s main)
@@ -295,7 +306,11 @@ scenario_preserve_base_commits() {
   (
     cd "$work_dir"
 
-    git branch upstream/main main
+    git update-ref refs/remotes/upstream/main "$(git rev-parse main)"
+    DRY_RUN=false \
+      UPSTREAM_BRANCH=main \
+      FORK_UPSTREAM_BRANCH=upstream \
+      bash "$ROOT_DIR/scripts/workflow/sync-upstream-branch.sh"
 
     git checkout -q main
     mkdir -p .github/workflows
@@ -308,7 +323,7 @@ scenario_preserve_base_commits() {
     git commit -q -m 'Feature patch (#7)'
     git push -q origin HEAD:main
 
-    git checkout -q -b patch/feature upstream/main
+    git checkout -q -b patch/feature refs/remotes/upstream/main
     printf 'base\nfeature\n' > app.txt
     git add app.txt
     git commit -q -m 'feature implementation'
@@ -324,6 +339,7 @@ scenario_preserve_base_commits() {
     DRY_RUN=false \
       UPSTREAM_BRANCH=main \
       FORK_MAIN=main \
+      FORK_UPSTREAM_BRANCH=upstream \
       bash "$ROOT_DIR/scripts/workflow/rebase.sh"
 
     subjects=$(git log --format=%s --max-count=2 main)

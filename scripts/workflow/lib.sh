@@ -5,20 +5,22 @@
 set -euo pipefail
 
 # Resolve the parent branch for a given patch branch.
-# Root branches (no "--") rebase onto upstream; children strip the last segment.
+# Root branches (no "--") rebase onto the fork-local upstream mirror; children
+# strip the last segment.
 #
-# Requires: UPSTREAM_BRANCH env var
+# Requires: FORK_UPSTREAM_BRANCH env var
 get_parent() {
   local branch="${1#patch/}"
   if [[ "$branch" == *"--"* ]]; then
     echo "patch/${branch%--*}"
   else
-    echo "upstream/$UPSTREAM_BRANCH"
+    echo "$FORK_UPSTREAM_BRANCH"
   fi
 }
 
 # Resolve the nearest ancestor that is still active in this run.
-# If all patch ancestors were merged or dropped, the branch rebases onto upstream.
+# If all patch ancestors were merged or dropped, the branch rebases onto the
+# fork-local upstream mirror.
 get_effective_parent() {
   local branch="$1"
   shift || true

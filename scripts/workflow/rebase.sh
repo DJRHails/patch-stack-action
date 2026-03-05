@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Rebase each active patch branch onto its parent. If all rebases succeed,
-# rebuild fork/main as upstream + preserved local commits + squash-merged patches.
+# rebuild fork/main as fork-local upstream mirror + preserved local commits +
+# squash-merged patches.
 #
-# Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_MAIN
+# Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_MAIN, FORK_UPSTREAM_BRANCH
 # Outputs (via GITHUB_OUTPUT): needs_claude
 
 # shellcheck source=workflow/lib.sh
@@ -85,7 +86,7 @@ collect_preserved_main_commits() {
     if ! is_patch_generated_commit "$commit"; then
       printf '%s\n' "$commit" >> /tmp/preserved_main_commits.txt
     fi
-  done < <(git rev-list --reverse "upstream/$UPSTREAM_BRANCH..$FORK_MAIN")
+  done < <(git rev-list --reverse "$FORK_UPSTREAM_BRANCH..$FORK_MAIN")
 }
 
 replay_preserved_main_commits() {
@@ -163,9 +164,9 @@ fi
 # If no conflicts, rebuild fork/main now (Claude will do it otherwise)
 if ! $needs_claude && [[ "$DRY_RUN" != "true" ]]; then
   echo ""
-  echo "-- Rebuilding $FORK_MAIN (preserved commits + squash per patch) --"
+  echo "-- Rebuilding $FORK_MAIN (${FORK_UPSTREAM_BRANCH} + preserved commits + squash per patch) --"
   git checkout "$FORK_MAIN" --quiet
-  git reset --hard "upstream/$UPSTREAM_BRANCH"
+  git reset --hard "$FORK_UPSTREAM_BRANCH"
 
   if ! replay_preserved_main_commits; then
     needs_claude=true

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Discover patch/* branches and classify them as active or merged.
 #
-# Requires env: UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_OWNER
+# Requires env: UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_UPSTREAM_BRANCH, FORK_OWNER
 # Outputs (via GITHUB_OUTPUT): merged_patches
 # Side effects: writes /tmp/active_branches.txt, /tmp/sorted_branches.txt, /tmp/meta_* files
 
@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib.sh"
 topo_sort() {
   # Repeatedly emit branches whose parent has already been emitted
   local -a active_branches=("$@") remaining=("$@") sorted=()
-  local -a emitted=("upstream/$UPSTREAM_BRANCH")
+  local -a emitted=("$FORK_UPSTREAM_BRANCH")
   local pass=0 max=$(( ${#remaining[@]} + 1 ))
   while [[ ${#remaining[@]} -gt 0 && $pass -lt $max ]]; do
     (( pass++ )) || true

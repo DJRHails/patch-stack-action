@@ -1,15 +1,16 @@
 # patch-stack-action
 
-A reusable GitHub Actions workflow that maintains a fork where `main` always equals **upstream/main + preserved fork-only base commits + your in-flight patches applied in order**.
+A reusable GitHub Actions workflow that maintains a fork where `main` always equals **a fork-local upstream mirror + preserved fork-only base commits + your in-flight patches applied in order**.
 
 Each patch corresponds to an open PR on the upstream repo. On each run the workflow:
 
 1. **Discovers** all `patch/*` branches in your fork
 2. **Checks** whether each patch's upstream PR has been merged or the problem fixed another way
-3. **Rebases** each patch branch onto its parent (or upstream/main for roots)
-4. **Rebuilds** `fork/main` = upstream/main + preserved fork-only base commits + patches in topological order
-5. **Resolves conflicts** using Claude Code when git can't do it cleanly
-6. **Closes and archives** patches whose upstream PRs are superseded
+3. **Mirrors** `upstream/main` into a fork-local `upstream` branch for PR bases
+4. **Rebases** each patch branch onto its parent (or the fork-local `upstream` branch for roots)
+5. **Rebuilds** `fork/main` = fork-local upstream mirror + preserved fork-only base commits + patches in topological order
+6. **Resolves conflicts** using Claude Code when git can't do it cleanly
+7. **Closes and archives** patches whose upstream PRs are superseded
 
 ## Repo structure
 
@@ -28,14 +29,14 @@ your-fork/
 Dependencies are encoded in the branch name using `--` as a separator. No config file needed.
 
 ```
-patch/fix-auth                              # root — rebases onto upstream/main
+patch/fix-auth                              # root — rebases onto fork/upstream
 patch/fix-auth--improve-token-refresh       # depends on fix-auth
 patch/fix-auth--improve-token-refresh--cleanup  # depends on improve-token-refresh
 patch/perf-improvement                      # independent root
 ```
 
 The parent of any branch is its name with the last `--segment` stripped.
-Roots (no `--`) rebase directly onto `upstream/main`.
+Roots (no `--`) rebase directly onto the fork-local `upstream` mirror branch, which is force-updated to match `upstream/main` on every run.
 
 When a PR is merged upstream → branch is deleted.
 When upstream fixes the same problem another way → PR is closed, branch renamed to `archived/*`.
@@ -45,12 +46,14 @@ When upstream fixes the same problem another way → PR is closed, branch rename
 On each rebuild, the workflow treats `fork/main` as:
 
 ```text
-upstream/main + preserved base commits + patch-stack commits
+fork/upstream + preserved base commits + patch-stack commits
 ```
 
 Preserved base commits are commits already on `fork/main` that do not look like patch-stack-generated squash commits. This makes it possible to keep local fork plumbing, such as `.github/workflows/patch-stack-sync.yml`, directly on `main` while still rebuilding the patch stack on top.
 
 Patch-stack-generated rebuild commits use the reserved subject prefix `patch-stack: ` and include a `Patch-Stack-Branch:` trailer in the commit body so future runs can distinguish them from preserved base commits.
+
+The workflow also maintains a fork-local `upstream` branch that mirrors the tracked upstream branch. Root patch PRs can target this branch, while dependent patches can target their parent patch branch, so the whole stack is visible in the fork's GitHub UI.
 
 ## Usage
 
@@ -63,6 +66,7 @@ jobs:
     with:
       upstream_repo: vercel-labs/agent-browser   # ← change this
       fork_repo: djrhails/agent-browser           # ← change this
+      fork_upstream_branch: upstream              # ← optional, defaults to "upstream"
     secrets:
       app_id: ${{ secrets.PATCH_STACK_APP_ID }}
       app_private_key: ${{ secrets.PATCH_STACK_APP_PRIVATE_KEY }}
@@ -77,6 +81,7 @@ jobs:
 | `upstream_branch` | | `main` | Branch to track on upstream |
 | `fork_repo` | ✅ | — | `owner/repo` of your fork |
 | `fork_main` | | `main` | Fork branch to keep rebuilt |
+| `fork_upstream_branch` | | `upstream` | Fork branch that mirrors the tracked upstream branch and serves as the base for root patch PRs |
 | `dry_run` | | `false` | Preview without pushing or closing PRs |
 
 ## Secrets
@@ -131,11 +136,27 @@ Generate a token locally with `claude setup-token`, then add it as `CLAUDE_CODE_
 cp example-caller.yml your-fork/.github/workflows/patch-stack-sync.yml
 ```
 
-Edit `upstream_repo` and `fork_repo`, commit, push.
+Edit `upstream_repo` and `fork_repo` (and optionally `fork_upstream_branch`), commit, push.
 
 ### 4. Open PRs from patch branches
 
 Create branches named `patch/<description>` in your fork and open PRs from them against the upstream repo. The automation handles the rest.
+
+If you also want the stack visible inside your fork, create fork-local PRs that follow the same dependency graph:
+
+```bash
+# Root patch
+gh pr create \
+  --repo your-fork/your-repo \
+  --head patch/my-feature \
+  --base upstream
+
+# Dependent patch
+gh pr create \
+  --repo your-fork/your-repo \
+  --head patch/my-feature--enhancement \
+  --base patch/my-feature
+```
 
 ## Converting a standard fork to a patch-stack fork
 
@@ -212,7 +233,7 @@ gh workflow run patch-stack-sync.yml -f dry_run=true
 gh workflow run patch-stack-sync.yml
 ```
 
-After the first successful run, your fork's `main` will be rebuilt as `upstream/main + patches` and future syncs are fully automated.
+After the first successful run, your fork's `main` will be rebuilt as `fork/upstream + patches` and future syncs are fully automated.
 
 ### Tips
 

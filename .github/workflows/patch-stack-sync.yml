@@ -21,6 +21,10 @@ on:
         description: 'Fork branch to rebuild'
         required: false
         default: 'main'
+      fork_upstream_branch:
+        description: 'Fork branch that mirrors upstream for patch PR bases'
+        required: false
+        default: 'upstream'
       dry_run:
         description: 'Dry run — no pushes or PR mutations'
         type: boolean
@@ -46,6 +50,11 @@ on:
         required: false
         type: string
         default: 'main'
+      fork_upstream_branch:
+        description: 'Fork branch that mirrors upstream for patch PR bases'
+        required: false
+        type: string
+        default: 'upstream'
       dry_run:
         description: 'If true, skip all pushes and PR mutations'
         required: false
@@ -171,6 +180,14 @@ jobs:
           # Fetch all patch/* branches from origin into local tracking branches
           git fetch origin '+refs/heads/patch/*:refs/heads/patch/*' --quiet 2>/dev/null || true
 
+      - name: Update fork upstream mirror branch
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
+        run: bash .patch-stack-action/scripts/workflow/sync-upstream-branch.sh
+
       # ── Discover patches ──────────────────────────────────────────────────
       - name: Discover patch branches and check upstream status
         id: discover
@@ -179,6 +196,7 @@ jobs:
           GH_TOKEN: ${{ steps.upstream-token.outputs.token }}
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
         run: bash .patch-stack-action/scripts/workflow/discover.sh
 
@@ -200,6 +218,7 @@ jobs:
           GH_TOKEN: ${{ steps.upstream-token.outputs.token }}
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
         run: bash .patch-stack-action/scripts/workflow/discover.sh
 
@@ -212,6 +231,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_MAIN: ${{ inputs.fork_main }}
+          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
         run: bash .patch-stack-action/scripts/workflow/rebase.sh
 
       # ── Claude Code conflict resolution ───────────────────────────────────
@@ -235,13 +255,19 @@ jobs:
             You are maintaining a patch stack fork of ${{ inputs.upstream_repo }}.
 
             This fork's `${{ inputs.fork_main }}` branch is always kept as:
-              upstream/${{ inputs.upstream_branch }} + all active patch branches applied in order
+              `${{ inputs.fork_upstream_branch }}` + all active patch branches applied in order
+
+            The `${{ inputs.fork_upstream_branch }}` branch is a fork-local mirror of
+            `upstream/${{ inputs.upstream_branch }}`. Root patches rebase onto that
+            branch so GitHub can display fork-local PRs cleanly.
 
             Each patch branch is named `patch/<n>` or `patch/<parent>--<child>` where
-            `--` encodes a dependency (child rebases onto parent, not directly onto upstream).
+            `--` encodes a dependency (child rebases onto parent, not directly onto
+            `${{ inputs.fork_upstream_branch }}`).
 
             The previous steps already:
             - Fetched upstream/${{ inputs.upstream_branch }}
+            - Updated `${{ inputs.fork_upstream_branch }}` to match upstream/${{ inputs.upstream_branch }}
             - Attempted to rebase each patch branch onto its parent
             - Pushed branches that rebased cleanly
             - Identified branches with conflicts, written to /tmp/conflicts.json
@@ -265,7 +291,7 @@ jobs:
             /tmp/preserved_main_commits.txt contains zero or more commit SHAs from the
             old ${{ inputs.fork_main }} that are local-only and must be preserved.
             Replay them in order with `git cherry-pick <sha>` after resetting
-            ${{ inputs.fork_main }} to upstream/${{ inputs.upstream_branch }} and before
+            ${{ inputs.fork_main }} to `${{ inputs.fork_upstream_branch }}` and before
             squash-merging the patch branches.
 
             ## Safety rules
@@ -283,8 +309,8 @@ jobs:
 
             1. Read the PR title and body carefully to understand INTENT of the patch.
             2. Check what changed in upstream that caused the conflict:
-               `git log --oneline upstream/${{ inputs.upstream_branch }} -20`
-               `git diff <parent> upstream/${{ inputs.upstream_branch }} -- <conflicting_files>`
+               `git log --oneline ${{ inputs.fork_upstream_branch }} -20`
+               `git diff <parent> ${{ inputs.fork_upstream_branch }} -- <conflicting_files>`
             3. DECISION — pick exactly one:
 
                **SUPERSEDED** — upstream has fully accomplished the PR's goal:
@@ -317,7 +343,7 @@ jobs:
 
             4. Rebuild ${{ inputs.fork_main }}:
                a. `git checkout ${{ inputs.fork_main }}`
-               b. `git reset --hard upstream/${{ inputs.upstream_branch }}`
+               b. `git reset --hard ${{ inputs.fork_upstream_branch }}`
                c. Replay each SHA in /tmp/preserved_main_commits.txt in order with
                   `git cherry-pick <sha>` if the file is non-empty
                d. For each branch in /tmp/sorted_branches.txt (skip archived ones):
@@ -341,6 +367,7 @@ jobs:
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_REPO: ${{ inputs.fork_repo }}
           FORK_MAIN: ${{ inputs.fork_main }}
+          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
           DRY_RUN: ${{ inputs.dry_run }}
           MERGED_PATCHES: ${{ steps.discover.outputs.merged_patches }}
           NEEDS_CLAUDE: ${{ steps.rebase.outputs.needs_claude }}
