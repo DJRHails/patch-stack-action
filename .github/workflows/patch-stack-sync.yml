@@ -82,6 +82,7 @@ jobs:
         env:
           FORK_REPO: ${{ inputs.fork_repo }}
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
           {
@@ -89,6 +90,9 @@ jobs:
             echo "fork_name=${FORK_REPO#*/}"
             echo "upstream_owner=${UPSTREAM_REPO%%/*}"
             echo "upstream_name=${UPSTREAM_REPO#*/}"
+            # Extract git ref from workflow_ref
+            # e.g. "owner/repo/.github/workflows/file.yml@refs/heads/main" → "refs/heads/main"
+            echo "action_ref=${WORKFLOW_REF##*@}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Generate fork GitHub App token
@@ -126,7 +130,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           repository: DJRHails/patch-stack-action
-          ref: ${{ github.workflow_sha }}
+          ref: ${{ steps.repos.outputs.action_ref }}
           path: .patch-stack-action
           sparse-checkout: scripts/workflow
           persist-credentials: false
