@@ -79,9 +79,9 @@ jobs:
 
 ### 1. Create a GitHub App
 
-A GitHub App token is required (not `GITHUB_TOKEN`) for three reasons:
+A GitHub App token is required for the fork (not `GITHUB_TOKEN`) for three reasons:
 - Pushes made by the action can trigger other workflows
-- Cross-repo PR operations (closing PRs on the upstream)
+- Fetching and pushing the fork even when it is private
 - Cron-triggered runs — OIDC token exchange [fails on scheduled workflows](https://github.com/anthropics/claude-code-action/issues/814); passing a pre-generated App token via `github_token` bypasses this entirely
 
 **Permissions needed:**
@@ -91,7 +91,19 @@ A GitHub App token is required (not `GITHUB_TOKEN`) for three reasons:
 
 **Install the app on:**
 - Your fork (required)
-- The upstream repo (required for closing PRs — or ask upstream maintainers to install it; otherwise superseded-PR closing will silently fail but branches will still be archived)
+- The upstream repo (optional)
+
+If the upstream repo is public, the workflow can fetch it anonymously even when the app is not installed there.
+
+Without an upstream installation, the workflow can still:
+- fetch upstream commits
+- discover PR metadata on public upstream repos
+- rebase patches and rebuild `fork/main`
+
+Without an upstream installation, the workflow cannot:
+- comment on upstream PRs when a patch is superseded
+- close upstream PRs automatically
+- access private upstream repos
 
 Add to your fork's repository secrets:
 - `PATCH_STACK_APP_ID`

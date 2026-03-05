@@ -2,11 +2,11 @@ name: Patch Stack Sync
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # nightly at 2am UTC
+    - cron: "0 4 * * *" # nightly at 4am UTC
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run — preview only, no pushes or PR mutations'
+        description: "Dry run — preview only, no pushes or PR mutations"
         type: boolean
         default: false
 
@@ -14,9 +14,9 @@ jobs:
   sync:
     uses: DJRHails/patch-stack-action/.github/workflows/patch-stack-sync.yml@main
     with:
-      upstream_repo: vercel-labs/agent-browser   # ← change per repo
+      upstream_repo: vercel-labs/agent-browser # ← change per repo
       upstream_branch: main
-      fork_repo: djrhails/agent-browser           # ← change per repo
+      fork_repo: djrhails/agent-browser # ← change per repo
       fork_main: main
       dry_run: ${{ inputs.dry_run || false }}
     secrets:
