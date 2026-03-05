@@ -193,8 +193,10 @@ jobs:
         id: discover
         shell: bash
         env:
-          GH_TOKEN: ${{ steps.upstream-token.outputs.token }}
+          UPSTREAM_GH_TOKEN: ${{ steps.upstream-token.outputs.token }}
+          FORK_GH_TOKEN: ${{ steps.fork-token.outputs.token }}
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
+          FORK_REPO: ${{ inputs.fork_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
@@ -215,8 +217,10 @@ jobs:
         if: steps.discover.outputs.merged_patches != ''
         shell: bash
         env:
-          GH_TOKEN: ${{ steps.upstream-token.outputs.token }}
+          UPSTREAM_GH_TOKEN: ${{ steps.upstream-token.outputs.token }}
+          FORK_GH_TOKEN: ${{ steps.fork-token.outputs.token }}
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
+          FORK_REPO: ${{ inputs.fork_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
@@ -285,6 +289,9 @@ jobs:
               "pr_body":           "..."  // full PR description
             }
 
+            PR metadata prefers the real upstream PR. If no upstream PR exists,
+            the workflow falls back to the fork-local visibility PR metadata.
+
             /tmp/sorted_branches.txt contains ALL active patch branches in topological
             order (one per line) — use this for rebuilding ${{ inputs.fork_main }}.
 
@@ -348,7 +355,7 @@ jobs:
                   `git cherry-pick <sha>` if the file is non-empty
                d. For each branch in /tmp/sorted_branches.txt (skip archived ones):
                   - `git merge --squash <branch>`
-                  - If clean: `git commit -m "patch-stack: <pr_title> (#<pr_num>)\n\nPatch-Stack-Branch: <branch>\nUpstream PR: <pr_url>"`
+                  - If clean: `git commit -m "patch-stack: <pr_title> (#<pr_num>)\n\nPatch-Stack-Branch: <branch>\n<Upstream PR|Local PR>: <pr_url>"`
                   - If conflict: resolve files, `git add`, then commit with same message format
                e. `git push --force origin ${{ inputs.fork_main }}`
 

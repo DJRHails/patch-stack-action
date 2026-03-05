@@ -11,6 +11,7 @@ source "$(dirname "$0")/lib.sh"
 
 PATCH_STACK_COMMIT_PREFIX="patch-stack: "
 PATCH_STACK_BRANCH_TRAILER="Patch-Stack-Branch: "
+PATCH_STACK_PR_TRAILERS=("Upstream PR:" "Local PR:")
 
 needs_claude=false
 echo "[]" > /tmp/conflicts.json
@@ -30,7 +31,7 @@ build_legacy_patch_subject() {
 }
 
 build_patch_commit_message() {
-  local branch="$1" pr_title="$2" pr_num="$3" pr_url="$4"
+  local branch="$1" pr_title="$2" pr_num="$3" pr_url="$4" pr_label="$5"
   local legacy_subject
   legacy_subject=$(build_legacy_patch_subject "$branch" "$pr_title" "$pr_num")
 
@@ -38,8 +39,13 @@ build_patch_commit_message() {
 
 ${PATCH_STACK_BRANCH_TRAILER}${branch}"
   if [[ -n "$pr_url" ]]; then
-    message="${message}
-Upstream PR: ${pr_url}"
+    if [[ -n "$pr_label" ]]; then
+      message="${message}
+${pr_label}: ${pr_url}"
+    else
+      message="${message}
+Local PR: ${pr_url}"
+    fi
   fi
 
   printf '%s' "$message"
@@ -66,7 +72,10 @@ is_patch_generated_commit() {
 
   [[ "$subject" == "${PATCH_STACK_COMMIT_PREFIX}"* ]] && return 0
   [[ "$body" == *"${PATCH_STACK_BRANCH_TRAILER}"* ]] && return 0
-  [[ "$body" == *"Upstream PR:"* ]] && return 0
+  local pr_trailer
+  for pr_trailer in "${PATCH_STACK_PR_TRAILERS[@]}"; do
+    [[ "$body" == *"$pr_trailer"* ]] && return 0
+  done
 
   local expected
   for expected in "${legacy_patch_subjects[@]}"; do
@@ -132,6 +141,7 @@ while IFS= read -r branch || [[ -n "$branch" ]]; do
   pr_url=$(cat   "/tmp/meta_url_${safe}"   2>/dev/null || echo "")
   pr_title=$(cat "/tmp/meta_title_${safe}" 2>/dev/null || echo "")
   pr_body=$(cat  "/tmp/meta_body_${safe}"  2>/dev/null || echo "")
+  pr_label=$(cat "/tmp/meta_pr_label_${safe}" 2>/dev/null || echo "")
 
   echo ""
   echo "-- Rebasing $branch onto $parent --"
@@ -179,6 +189,7 @@ if ! $needs_claude && [[ "$DRY_RUN" != "true" ]]; then
       pr_title=$(cat "/tmp/meta_title_${safe}" 2>/dev/null || echo "")
       pr_num=$(cat  "/tmp/meta_num_${safe}"   2>/dev/null || echo "")
       pr_url=$(cat  "/tmp/meta_url_${safe}"   2>/dev/null || echo "")
+      pr_label=$(cat "/tmp/meta_pr_label_${safe}" 2>/dev/null || echo "")
       echo "  Squash-merging $branch..."
 
       # --squash stages all changes without creating a merge commit,
@@ -187,7 +198,7 @@ if ! $needs_claude && [[ "$DRY_RUN" != "true" ]]; then
         if git diff --cached --quiet; then
           echo "    No staged changes after squash; skipping empty patch"
         else
-          git commit -m "$(build_patch_commit_message "$branch" "$pr_title" "$pr_num" "$pr_url")" --quiet
+          git commit -m "$(build_patch_commit_message "$branch" "$pr_title" "$pr_num" "$pr_url" "$pr_label")" --quiet
           echo "    Done"
         fi
       else

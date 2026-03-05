@@ -55,6 +55,8 @@ Patch-stack-generated rebuild commits use the reserved subject prefix `patch-sta
 
 The workflow also maintains a fork-local `upstream` branch that mirrors the tracked upstream branch. Root patch PRs can target this branch, while dependent patches can target their parent patch branch, so the whole stack is visible in the fork's GitHub UI.
 
+When generating squash commit messages on `fork/main`, the workflow prefers metadata from the real upstream PR. If no upstream PR exists, it falls back to the fork-local visibility PR title and reference.
+
 ## Usage
 
 Copy `example-caller.yml` into your fork at `.github/workflows/patch-stack-sync.yml` and update the two repo inputs:
