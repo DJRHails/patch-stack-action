@@ -6,6 +6,7 @@
 #   bash scripts/dev/local-simulations.sh empty     # run one scenario
 #   bash scripts/dev/local-simulations.sh rename    # run one scenario
 #   bash scripts/dev/local-simulations.sh collapse  # run one scenario
+#   bash scripts/dev/local-simulations.sh preserve  # run one scenario
 
 set -euo pipefail
 
@@ -51,6 +52,7 @@ reset_tmp_state() {
     /tmp/conflicts.json \
     /tmp/conflicts.tmp \
     /tmp/out_merged.txt \
+    /tmp/preserved_main_commits.txt \
     /tmp/rebase_err.txt \
     /tmp/sorted_branches.txt \
     /tmp/squash_err.txt \
@@ -281,6 +283,71 @@ scenario_empty_after_rebase() {
   SCENARIOS_RAN=$((SCENARIOS_RAN + 1))
 }
 
+scenario_preserve_base_commits() {
+  info "preserve: keep direct main commits and re-tag legacy patch rebuild commits"
+  reset_tmp_state
+
+  local work_dir fake_bin
+  mapfile -t repo_info < <(create_repo preserve)
+  work_dir="${repo_info[0]}"
+  fake_bin="${repo_info[1]}"
+
+  (
+    cd "$work_dir"
+
+    git branch upstream/main main
+
+    git checkout -q main
+    mkdir -p .github/workflows
+    printf 'name: Patch Stack Sync\n' > .github/workflows/patch-stack-sync.yml
+    git add .github/workflows/patch-stack-sync.yml
+    git commit -q -m 'chore: add sync workflow'
+
+    printf 'base\nfeature\n' > app.txt
+    git add app.txt
+    git commit -q -m 'Feature patch (#7)'
+    git push -q origin HEAD:main
+
+    git checkout -q -b patch/feature upstream/main
+    printf 'base\nfeature\n' > app.txt
+    git add app.txt
+    git commit -q -m 'feature implementation'
+    git push -q origin HEAD
+
+    printf 'patch/feature\n' > /tmp/active_branches.txt
+    printf 'patch/feature\n' > /tmp/sorted_branches.txt
+    printf 'Feature patch\n' > /tmp/meta_title_patch_feature
+    printf '7\n' > /tmp/meta_num_patch_feature
+    printf 'https://example.test/pr/7\n' > /tmp/meta_url_patch_feature
+    printf 'PR body\n' > /tmp/meta_body_patch_feature
+
+    DRY_RUN=false \
+      UPSTREAM_BRANCH=main \
+      FORK_MAIN=main \
+      bash "$ROOT_DIR/scripts/workflow/rebase.sh"
+
+    subjects=$(git log --format=%s --max-count=2 main)
+    expected_subjects=$'patch-stack: Feature patch (#7)\nchore: add sync workflow'
+    assert_eq "$expected_subjects" "$subjects" "main should preserve base commit and regenerate patch commit with reserved prefix"
+
+    patch_body=$(git log -1 --format=%B main)
+    [[ "$patch_body" == *'Patch-Stack-Branch: patch/feature'* ]] \
+      || fail "patch rebuild commit should record the source branch trailer"
+
+    app_contents=$(cat app.txt)
+    assert_eq $'base\nfeature' "$app_contents" "patch changes should be applied exactly once after rebuild"
+
+    preserved=$(cat /tmp/preserved_main_commits.txt)
+    assert_line_count 1 "$preserved" "only the direct main commit should be preserved"
+
+    preserved_subject=$(git log -1 --format=%s "$(cat /tmp/preserved_main_commits.txt)")
+    assert_eq 'chore: add sync workflow' "$preserved_subject" "legacy patch rebuild commit should not be preserved"
+  )
+
+  pass "preserve"
+  SCENARIOS_RAN=$((SCENARIOS_RAN + 1))
+}
+
 run_named_scenario() {
   case "$1" in
     rename)
@@ -292,10 +359,14 @@ run_named_scenario() {
     empty)
       scenario_empty_after_rebase
       ;;
+    preserve)
+      scenario_preserve_base_commits
+      ;;
     all)
       scenario_rename_descendant
       scenario_collapse_multi_level
       scenario_empty_after_rebase
+      scenario_preserve_base_commits
       ;;
     *)
       fail "unknown scenario: $1"

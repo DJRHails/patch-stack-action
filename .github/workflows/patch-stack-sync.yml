@@ -246,6 +246,8 @@ jobs:
             - Pushed branches that rebased cleanly
             - Identified branches with conflicts, written to /tmp/conflicts.json
             - Exported UPSTREAM_GH_TOKEN when the app is installed on the upstream repo
+            - Collected any non-patch-stack commits already on ${{ inputs.fork_main }}
+              into /tmp/preserved_main_commits.txt so they can be replayed before patches
 
             /tmp/conflicts.json contains an array of objects:
             {
@@ -259,6 +261,12 @@ jobs:
 
             /tmp/sorted_branches.txt contains ALL active patch branches in topological
             order (one per line) — use this for rebuilding ${{ inputs.fork_main }}.
+
+            /tmp/preserved_main_commits.txt contains zero or more commit SHAs from the
+            old ${{ inputs.fork_main }} that are local-only and must be preserved.
+            Replay them in order with `git cherry-pick <sha>` after resetting
+            ${{ inputs.fork_main }} to upstream/${{ inputs.upstream_branch }} and before
+            squash-merging the patch branches.
 
             ## Safety rules
 
@@ -307,14 +315,16 @@ jobs:
 
             After handling all conflicts (only if none aborted):
 
-            4. Rebuild ${{ inputs.fork_main }} using squash merges (one commit per patch):
+            4. Rebuild ${{ inputs.fork_main }}:
                a. `git checkout ${{ inputs.fork_main }}`
                b. `git reset --hard upstream/${{ inputs.upstream_branch }}`
-               c. For each branch in /tmp/sorted_branches.txt (skip archived ones):
+               c. Replay each SHA in /tmp/preserved_main_commits.txt in order with
+                  `git cherry-pick <sha>` if the file is non-empty
+               d. For each branch in /tmp/sorted_branches.txt (skip archived ones):
                   - `git merge --squash <branch>`
-                  - If clean: `git commit -m "<pr_title> (#<pr_num>)\n\nUpstream PR: <pr_url>"`
+                  - If clean: `git commit -m "patch-stack: <pr_title> (#<pr_num>)\n\nPatch-Stack-Branch: <branch>\nUpstream PR: <pr_url>"`
                   - If conflict: resolve files, `git add`, then commit with same message format
-               d. `git push --force origin ${{ inputs.fork_main }}`
+               e. `git push --force origin ${{ inputs.fork_main }}`
 
             5. Write a markdown summary to /tmp/claude_summary.md:
                - Branches resolved cleanly (list)

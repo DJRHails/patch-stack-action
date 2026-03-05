@@ -1,13 +1,13 @@
 # patch-stack-action
 
-A reusable GitHub Actions workflow that maintains a fork where `main` always equals **upstream/main + your in-flight patches applied in order**.
+A reusable GitHub Actions workflow that maintains a fork where `main` always equals **upstream/main + preserved fork-only base commits + your in-flight patches applied in order**.
 
 Each patch corresponds to an open PR on the upstream repo. On each run the workflow:
 
 1. **Discovers** all `patch/*` branches in your fork
 2. **Checks** whether each patch's upstream PR has been merged or the problem fixed another way
 3. **Rebases** each patch branch onto its parent (or upstream/main for roots)
-4. **Rebuilds** `fork/main` = upstream/main + patches in topological order
+4. **Rebuilds** `fork/main` = upstream/main + preserved fork-only base commits + patches in topological order
 5. **Resolves conflicts** using Claude Code when git can't do it cleanly
 6. **Closes and archives** patches whose upstream PRs are superseded
 
@@ -39,6 +39,18 @@ Roots (no `--`) rebase directly onto `upstream/main`.
 
 When a PR is merged upstream → branch is deleted.
 When upstream fixes the same problem another way → PR is closed, branch renamed to `archived/*`.
+
+## Rebuild model
+
+On each rebuild, the workflow treats `fork/main` as:
+
+```text
+upstream/main + preserved base commits + patch-stack commits
+```
+
+Preserved base commits are commits already on `fork/main` that do not look like patch-stack-generated squash commits. This makes it possible to keep local fork plumbing, such as `.github/workflows/patch-stack-sync.yml`, directly on `main` while still rebuilding the patch stack on top.
+
+Patch-stack-generated rebuild commits use the reserved subject prefix `patch-stack: ` and include a `Patch-Stack-Branch:` trailer in the commit body so future runs can distinguish them from preserved base commits.
 
 ## Usage
 
@@ -223,6 +235,7 @@ Run a single scenario by name:
 bash scripts/dev/local-simulations.sh rename
 bash scripts/dev/local-simulations.sh collapse
 bash scripts/dev/local-simulations.sh empty
+bash scripts/dev/local-simulations.sh preserve
 ```
 
 Current scenarios cover:
@@ -230,6 +243,7 @@ Current scenarios cover:
 - descendant branch collapse after a merged parent (`patch/merged-pr--child-pr` → `patch/child-pr`)
 - multi-level collapse when several ancestors are merged
 - empty-after-rebase patches that should not fail the `fork/main` rebuild
+- preserved direct commits on `main` while legacy patch rebuild commits are regenerated with the `patch-stack:` prefix
 
 The harness uses a fake local `gh` binary to emulate branch rename API calls and asserts on the resulting local and bare-remote refs.
 

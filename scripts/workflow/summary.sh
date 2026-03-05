@@ -21,6 +21,15 @@ set -euo pipefail
     echo ""
   fi
 
+  if [[ -s /tmp/preserved_main_commits.txt ]]; then
+    echo "## Preserved fork commits on \`${FORK_MAIN}\`"
+    while IFS= read -r commit || [[ -n "$commit" ]]; do
+      [[ -z "$commit" ]] && continue
+      echo "- \`$(git log -1 --format='%h %s' "$commit")\`"
+    done < /tmp/preserved_main_commits.txt
+    echo ""
+  fi
+
   if [[ "$NEEDS_CLAUDE" == "true" ]]; then
     echo "## Claude resolved conflicts"
     if [[ -f /tmp/claude_summary.md ]]; then
