@@ -57,6 +57,10 @@ The workflow also maintains a fork-local `upstream` branch that mirrors the trac
 
 When generating squash commit messages on `fork/main`, the workflow prefers metadata from the real upstream PR. If no upstream PR exists, it falls back to the fork-local visibility PR title and reference.
 
+## Quick start with AI
+
+Copy the prompt from [`SETUP_PROMPT.md`](SETUP_PROMPT.md) into a Claude Code session at the root of your fork. It will create the workflow file, add a README fork note, document the workflow in CLAUDE.md, and set up the upstream mirror branch. You still need to create the GitHub App and add secrets manually (instructions included in the prompt output).
+
 ## Usage
 
 Copy `example-caller.yml` into your fork at `.github/workflows/patch-stack-sync.yml` and update the two repo inputs:
