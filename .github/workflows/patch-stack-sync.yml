@@ -25,6 +25,11 @@ on:
         description: 'Fork branch that mirrors upstream for patch PR bases'
         required: false
         default: 'upstream'
+      upstream_tag_pattern:
+        description: 'Pin upstream to latest tag matching this glob (e.g. v*). Excludes pre-release tags containing a hyphen suffix. Leave empty to track branch HEAD.'
+        required: false
+        type: string
+        default: ''
       dry_run:
         description: 'Dry run — no pushes or PR mutations'
         type: boolean
@@ -55,6 +60,11 @@ on:
         required: false
         type: string
         default: 'upstream'
+      upstream_tag_pattern:
+        description: 'Pin upstream to latest tag matching this glob (e.g. v*). Excludes pre-release tags containing a hyphen suffix. Leave empty to track branch HEAD.'
+        required: false
+        type: string
+        default: ''
       dry_run:
         description: 'If true, skip all pushes and PR mutations'
         required: false
@@ -176,15 +186,17 @@ jobs:
           git remote add upstream "${upstream_url}" 2>/dev/null \
             || git remote set-url upstream "${upstream_url}"
 
-          git fetch upstream "$UPSTREAM_BRANCH" --quiet
+          git fetch upstream "$UPSTREAM_BRANCH" --tags --quiet
           # Fetch all patch/* branches from origin into local tracking branches
           git fetch origin '+refs/heads/patch/*:refs/heads/patch/*' --quiet 2>/dev/null || true
 
       - name: Update fork upstream mirror branch
+        id: sync-upstream
         shell: bash
         env:
           DRY_RUN: ${{ inputs.dry_run }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+          UPSTREAM_TAG_PATTERN: ${{ inputs.upstream_tag_pattern }}
           FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
         run: bash .patch-stack-action/scripts/workflow/sync-upstream-branch.sh
 
@@ -388,6 +400,7 @@ jobs:
         env:
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
+          UPSTREAM_TAG: ${{ steps.sync-upstream.outputs.upstream_tag }}
           FORK_REPO: ${{ inputs.fork_repo }}
           FORK_MAIN: ${{ inputs.fork_main }}
           FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
