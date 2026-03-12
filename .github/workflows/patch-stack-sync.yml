@@ -406,6 +406,7 @@ jobs:
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           UPSTREAM_TAG: ${{ steps.sync-upstream.outputs.upstream_tag }}
+          UPSTREAM_SHA: ${{ steps.sync-upstream.outputs.upstream_sha }}
           FORK_REPO: ${{ inputs.fork_repo }}
           FORK_MAIN: ${{ inputs.fork_main }}
           FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}

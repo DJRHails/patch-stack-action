@@ -3,15 +3,18 @@
 #
 # Requires env: UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_REPO, FORK_MAIN,
 #               FORK_UPSTREAM_BRANCH, DRY_RUN, MERGED_PATCHES, NEEDS_CLAUDE
-# Optional env: UPSTREAM_TAG
+# Optional env: UPSTREAM_TAG, UPSTREAM_SHA
 
 set -euo pipefail
 
 {
 	echo "# Patch Stack Sync"
 	echo ""
+	upstream_short_sha="${UPSTREAM_SHA:+${UPSTREAM_SHA:0:12}}"
 	if [[ -n "${UPSTREAM_TAG:-}" ]]; then
-		echo "**Upstream:** \`${UPSTREAM_REPO}@${UPSTREAM_TAG}\` (pinned tag on \`${UPSTREAM_BRANCH}\`)"
+		echo "**Upstream:** \`${UPSTREAM_REPO}@${UPSTREAM_TAG}\` (\`${upstream_short_sha:-unknown}\`, pinned tag on \`${UPSTREAM_BRANCH}\`)"
+	elif [[ -n "${upstream_short_sha:-}" ]]; then
+		echo "**Upstream:** \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\` (\`${upstream_short_sha}\`)"
 	else
 		echo "**Upstream:** \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\`"
 	fi

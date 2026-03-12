@@ -4,7 +4,7 @@
 #
 # Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_UPSTREAM_BRANCH
 # Optional env: UPSTREAM_TAG_PATTERN (glob, e.g. "v*")
-# Outputs (via GITHUB_OUTPUT): upstream_tag
+# Outputs (via GITHUB_OUTPUT): upstream_tag, upstream_sha
 
 set -euo pipefail
 
@@ -33,8 +33,11 @@ fi
 echo "Syncing ${FORK_UPSTREAM_BRANCH} -> ${target_ref}"
 git branch -f "$FORK_UPSTREAM_BRANCH" "$target_ref" >/dev/null
 
+upstream_sha=$(git rev-parse "$FORK_UPSTREAM_BRANCH")
+
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "upstream_tag=${upstream_tag}" >> "$GITHUB_OUTPUT"
+  echo "upstream_sha=${upstream_sha}" >> "$GITHUB_OUTPUT"
 fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
