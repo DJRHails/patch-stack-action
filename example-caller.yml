@@ -18,7 +18,7 @@ jobs:
       upstream_branch: main
       fork_repo: djrhails/agent-browser # ← change per repo
       fork_main: main
-      fork_upstream_branch: upstream
+      fork_base_branch: base
       dry_run: ${{ inputs.dry_run || false }}
     secrets:
       app_id: ${{ secrets.PATCH_STACK_APP_ID }}

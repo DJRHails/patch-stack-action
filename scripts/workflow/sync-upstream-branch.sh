@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Maintain a fork-local branch that mirrors upstream/<branch>, optionally
+# Maintain the fork's base branch that mirrors upstream/<branch>, optionally
 # pinned to the latest tag matching a glob pattern.
 #
-# Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_UPSTREAM_BRANCH
+# Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_BASE_BRANCH
 # Optional env: UPSTREAM_TAG_PATTERN (glob, e.g. "v*")
 #               UPSTREAM_COMMIT_OVERRIDE (full or short SHA)
 # Outputs (via GITHUB_OUTPUT): upstream_tag, upstream_sha
@@ -54,10 +54,10 @@ if [[ -n "${UPSTREAM_COMMIT_OVERRIDE:-}" ]]; then
   fi
 fi
 
-echo "Syncing ${FORK_UPSTREAM_BRANCH} -> ${target_ref}"
-git branch -f "$FORK_UPSTREAM_BRANCH" "$target_ref" >/dev/null
+echo "Syncing ${FORK_BASE_BRANCH} -> ${target_ref}"
+git branch -f "$FORK_BASE_BRANCH" "$target_ref" >/dev/null
 
-upstream_sha=$(git rev-parse "$FORK_UPSTREAM_BRANCH")
+upstream_sha=$(git rev-parse "$FORK_BASE_BRANCH")
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "upstream_tag=${upstream_tag}" >> "$GITHUB_OUTPUT"
@@ -70,9 +70,9 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 git fetch origin \
-  "+refs/heads/${FORK_UPSTREAM_BRANCH}:refs/remotes/origin/${FORK_UPSTREAM_BRANCH}" \
+  "+refs/heads/${FORK_BASE_BRANCH}:refs/remotes/origin/${FORK_BASE_BRANCH}" \
   --quiet 2>/dev/null || true
 
-git push --force-with-lease origin "$FORK_UPSTREAM_BRANCH" --quiet
+git push --force-with-lease origin "$FORK_BASE_BRANCH" --quiet
 
-echo "${FORK_UPSTREAM_BRANCH} updated"
+echo "${FORK_BASE_BRANCH} updated"

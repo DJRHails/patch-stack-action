@@ -2,7 +2,7 @@
 # Write the GitHub Actions job summary.
 #
 # Requires env: UPSTREAM_REPO, UPSTREAM_BRANCH, FORK_REPO, FORK_MAIN,
-#               FORK_UPSTREAM_BRANCH, DRY_RUN, MERGED_PATCHES, NEEDS_CLAUDE
+#               FORK_BASE_BRANCH, DRY_RUN, MERGED_PATCHES, NEEDS_CLAUDE
 # Optional env: UPSTREAM_TAG, UPSTREAM_SHA
 
 set -euo pipefail
@@ -19,7 +19,7 @@ set -euo pipefail
 		echo "**Upstream:** \`${UPSTREAM_REPO}@${UPSTREAM_BRANCH}\`"
 	fi
 	echo "**Fork:** \`${FORK_REPO}@${FORK_MAIN}\`"
-	echo "**Fork upstream mirror:** \`${FORK_REPO}@${FORK_UPSTREAM_BRANCH}\`"
+	echo "**Fork base branch:** \`${FORK_REPO}@${FORK_BASE_BRANCH}\`"
 	echo "**Dry run:** ${DRY_RUN}"
 	echo ""
 

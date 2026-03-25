@@ -21,10 +21,10 @@ on:
         description: 'Fork branch to rebuild'
         required: false
         default: 'main'
-      fork_upstream_branch:
-        description: 'Fork branch that mirrors upstream for patch PR bases'
+      fork_base_branch:
+        description: 'Fork base branch (mirrors upstream, used as PR base for patches)'
         required: false
-        default: 'upstream'
+        default: 'base'
       upstream_tag_pattern:
         description: 'Pin upstream to latest tag matching this glob (e.g. v*). Excludes pre-release tags containing a hyphen suffix. Leave empty to track branch HEAD.'
         required: false
@@ -60,11 +60,11 @@ on:
         required: false
         type: string
         default: 'main'
-      fork_upstream_branch:
-        description: 'Fork branch that mirrors upstream for patch PR bases'
+      fork_base_branch:
+        description: 'Fork base branch (mirrors upstream, used as PR base for patches)'
         required: false
         type: string
-        default: 'upstream'
+        default: 'base'
       upstream_tag_pattern:
         description: 'Pin upstream to latest tag matching this glob (e.g. v*). Excludes pre-release tags containing a hyphen suffix. Leave empty to track branch HEAD.'
         required: false
@@ -205,7 +205,7 @@ jobs:
           # Fetch all patch/* branches from origin into local tracking branches
           git fetch origin '+refs/heads/patch/*:refs/heads/patch/*' --quiet 2>/dev/null || true
 
-      - name: Update fork upstream mirror branch
+      - name: Update fork base branch
         id: sync-upstream
         shell: bash
         env:
@@ -213,7 +213,7 @@ jobs:
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           UPSTREAM_TAG_PATTERN: ${{ inputs.upstream_tag_pattern }}
           UPSTREAM_COMMIT_OVERRIDE: ${{ inputs.upstream_commit_override }}
-          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
+          FORK_BASE_BRANCH: ${{ inputs.fork_base_branch }}
         run: bash .patch-stack-action/scripts/workflow/sync-upstream-branch.sh
 
       # ── Discover patches ──────────────────────────────────────────────────
@@ -226,7 +226,7 @@ jobs:
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           FORK_REPO: ${{ inputs.fork_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
-          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
+          FORK_BASE_BRANCH: ${{ inputs.fork_base_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
         run: bash .patch-stack-action/scripts/workflow/discover.sh
 
@@ -250,7 +250,7 @@ jobs:
           UPSTREAM_REPO: ${{ inputs.upstream_repo }}
           FORK_REPO: ${{ inputs.fork_repo }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
-          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
+          FORK_BASE_BRANCH: ${{ inputs.fork_base_branch }}
           FORK_OWNER: ${{ steps.repos.outputs.fork_owner }}
         run: bash .patch-stack-action/scripts/workflow/discover.sh
 
@@ -263,7 +263,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           FORK_MAIN: ${{ inputs.fork_main }}
-          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
+          FORK_BASE_BRANCH: ${{ inputs.fork_base_branch }}
         run: bash .patch-stack-action/scripts/workflow/rebase.sh
 
       # ── Claude Code conflict resolution ───────────────────────────────────
@@ -287,25 +287,25 @@ jobs:
             You are maintaining a patch stack fork of ${{ inputs.upstream_repo }}.
 
             This fork's `${{ inputs.fork_main }}` branch is always kept as:
-              `${{ inputs.fork_upstream_branch }}` + all active patch branches applied in order
+              `${{ inputs.fork_base_branch }}` + all active patch branches applied in order
 
-            The `${{ inputs.fork_upstream_branch }}` branch is a fork-local mirror of
+            The `${{ inputs.fork_base_branch }}` branch is a fork-local mirror of
             `upstream/${{ inputs.upstream_branch }}`. Root patches rebase onto that
             branch so GitHub can display fork-local PRs cleanly.
 
             Each patch branch is named `patch/<n>` or `patch/<parent>--<child>` where
             `--` encodes a dependency (child rebases onto parent, not directly onto
-            `${{ inputs.fork_upstream_branch }}`).
+            `${{ inputs.fork_base_branch }}`).
 
             The previous steps already:
             - Fetched upstream/${{ inputs.upstream_branch }}
-            - Updated `${{ inputs.fork_upstream_branch }}` to match upstream/${{ inputs.upstream_branch }}
+            - Updated `${{ inputs.fork_base_branch }}` to match upstream/${{ inputs.upstream_branch }}
             - Attempted to rebase each patch branch onto its parent
             - Pushed branches that rebased cleanly
             - Identified branches with conflicts, written to /tmp/conflicts.json
             - Exported UPSTREAM_GH_TOKEN when the app is installed on the upstream repo
-            - Collected any non-patch-stack commits already on ${{ inputs.fork_main }}
-              into /tmp/preserved_main_commits.txt so they can be replayed before patches
+            - Collected fork-specific commits (subject starts with "fork: ") from
+              ${{ inputs.fork_main }} into /tmp/preserved_main_commits.txt to replay before patches
 
             /tmp/conflicts.json contains an array of objects:
             {
@@ -342,7 +342,7 @@ jobs:
             /tmp/preserved_main_commits.txt contains zero or more commit SHAs from the
             old ${{ inputs.fork_main }} that are local-only and must be preserved.
             Replay them in order with `git cherry-pick <sha>` after resetting
-            ${{ inputs.fork_main }} to `${{ inputs.fork_upstream_branch }}` and before
+            ${{ inputs.fork_main }} to `${{ inputs.fork_base_branch }}` and before
             squash-merging the patch branches.
 
             ## Safety rules
@@ -360,8 +360,8 @@ jobs:
 
             1. Read the PR title and body carefully to understand INTENT of the patch.
             2. Check what changed in upstream that caused the conflict:
-               `git log --oneline ${{ inputs.fork_upstream_branch }} -20`
-               `git diff <parent> ${{ inputs.fork_upstream_branch }} -- <conflicting_files>`
+               `git log --oneline ${{ inputs.fork_base_branch }} -20`
+               `git diff <parent> ${{ inputs.fork_base_branch }} -- <conflicting_files>`
             3. DECISION — pick exactly one:
 
                **SUPERSEDED** — upstream has fully accomplished the PR's goal:
@@ -394,7 +394,7 @@ jobs:
 
             4. Rebuild ${{ inputs.fork_main }}:
                a. `git checkout ${{ inputs.fork_main }}`
-               b. `git reset --hard ${{ inputs.fork_upstream_branch }}`
+               b. `git reset --hard ${{ inputs.fork_base_branch }}`
                c. Replay each SHA in /tmp/preserved_main_commits.txt in order with
                   `git cherry-pick <sha>` if the file is non-empty
                d. For each branch in /tmp/sorted_branches.txt (skip archived ones):
@@ -420,7 +420,7 @@ jobs:
           UPSTREAM_SHA: ${{ steps.sync-upstream.outputs.upstream_sha }}
           FORK_REPO: ${{ inputs.fork_repo }}
           FORK_MAIN: ${{ inputs.fork_main }}
-          FORK_UPSTREAM_BRANCH: ${{ inputs.fork_upstream_branch }}
+          FORK_BASE_BRANCH: ${{ inputs.fork_base_branch }}
           DRY_RUN: ${{ inputs.dry_run }}
           MERGED_PATCHES: ${{ steps.discover.outputs.merged_patches }}
           NEEDS_CLAUDE: ${{ steps.rebase.outputs.needs_claude }}

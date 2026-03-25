@@ -3,7 +3,7 @@
 # rebuild fork/main as fork-local upstream mirror + preserved local commits +
 # squash-merged patches.
 #
-# Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_MAIN, FORK_UPSTREAM_BRANCH
+# Requires env: DRY_RUN, UPSTREAM_BRANCH, FORK_MAIN, FORK_BASE_BRANCH
 # Outputs (via GITHUB_OUTPUT): needs_claude
 
 # shellcheck source=workflow/lib.sh
@@ -85,51 +85,42 @@ is_patch_generated_commit() {
   return 1
 }
 
-# Build a set of commit SHAs that already exist in upstream history
-# (by patch-id matching). When the fork-local upstream mirror is
-# pinned to a tag older than the previous upstream HEAD, the range
-# FORK_UPSTREAM_BRANCH..FORK_MAIN includes upstream commits that were
-# already on main before the pin. These should not be preserved.
-#
-# Uses `git cherry` which efficiently compares patch-ids between two
-# branches. Commits marked with "-" are already upstream.
-build_upstream_commit_set() {
-  declare -gA _upstream_commits=()
+# Preserved commits convention:
+# Only commits whose subject starts with "fork:" are preserved across
+# main rebuilds. Everything else on main (upstream cherry-picks, patch-stack
+# squash-merges, etc.) is dropped and rebuilt from scratch.
+FORK_COMMIT_PREFIX="fork: "
 
-  # git cherry <upstream> <head> <limit>
-  # Lists commits in limit..head, prefixed with - (in upstream) or + (unique)
-  local mark sha
-  while read -r mark sha; do
-    if [[ "$mark" == "-" ]]; then
-      _upstream_commits["$sha"]=1
-    fi
-  done < <(git cherry "upstream/${UPSTREAM_BRANCH}" "$FORK_MAIN" "$FORK_UPSTREAM_BRANCH" 2>/dev/null || true)
-}
-
-is_upstream_commit() {
-  [[ -n "${_upstream_commits[$1]+x}" ]]
+is_fork_commit() {
+  local commit="$1"
+  local subject
+  subject=$(git log -1 --format=%s "$commit")
+  [[ "$subject" == "${FORK_COMMIT_PREFIX}"* ]]
 }
 
 collect_preserved_main_commits() {
   : > /tmp/preserved_main_commits.txt
   load_legacy_patch_subjects
-  build_upstream_commit_set
 
-  local commit skipped=0
+  local commit skipped=0 preserved=0
   while IFS= read -r commit || [[ -n "$commit" ]]; do
     [[ -z "$commit" ]] && continue
     if is_patch_generated_commit "$commit"; then
       continue
     fi
-    if is_upstream_commit "$commit"; then
+    if is_fork_commit "$commit"; then
+      printf '%s\n' "$commit" >> /tmp/preserved_main_commits.txt
+      (( preserved++ )) || true
+    else
       (( skipped++ )) || true
-      continue
     fi
-    printf '%s\n' "$commit" >> /tmp/preserved_main_commits.txt
-  done < <(git rev-list --reverse "$FORK_UPSTREAM_BRANCH..$FORK_MAIN")
+  done < <(git rev-list --reverse "$FORK_BASE_BRANCH..$FORK_MAIN")
 
   if [[ $skipped -gt 0 ]]; then
-    echo "  Skipped ${skipped} upstream commit(s) already in upstream/${UPSTREAM_BRANCH}"
+    echo "  Skipped ${skipped} non-fork commit(s) (only 'fork: ...' commits are preserved)"
+  fi
+  if [[ $preserved -gt 0 ]]; then
+    echo "  Preserving ${preserved} fork commit(s)"
   fi
 }
 
@@ -209,9 +200,9 @@ fi
 # If no conflicts, rebuild fork/main now (Claude will do it otherwise)
 if ! $needs_claude && [[ "$DRY_RUN" != "true" ]]; then
   echo ""
-  echo "-- Rebuilding $FORK_MAIN (${FORK_UPSTREAM_BRANCH} + preserved commits + squash per patch) --"
+  echo "-- Rebuilding $FORK_MAIN (${FORK_BASE_BRANCH} + preserved commits + squash per patch) --"
   git checkout "$FORK_MAIN" --quiet
-  git reset --hard "$FORK_UPSTREAM_BRANCH"
+  git reset --hard "$FORK_BASE_BRANCH"
 
   if ! replay_preserved_main_commits; then
     needs_claude=true

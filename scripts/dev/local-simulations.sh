@@ -246,7 +246,7 @@ scenario_empty_after_rebase() {
     git update-ref refs/remotes/upstream/main "$(git rev-parse main)"
     DRY_RUN=false \
       UPSTREAM_BRANCH=main \
-      FORK_UPSTREAM_BRANCH=upstream \
+      FORK_BASE_BRANCH=base \
       bash "$ROOT_DIR/scripts/workflow/sync-upstream-branch.sh"
     git checkout -q -b patch/already-applied refs/remotes/upstream/main
     printf 'base\nfeature\n' > app.txt
@@ -261,7 +261,7 @@ scenario_empty_after_rebase() {
     git push -q origin HEAD:main
     DRY_RUN=false \
       UPSTREAM_BRANCH=main \
-      FORK_UPSTREAM_BRANCH=upstream \
+      FORK_BASE_BRANCH=base \
       bash "$ROOT_DIR/scripts/workflow/sync-upstream-branch.sh"
     git checkout -q main
 
@@ -275,7 +275,7 @@ scenario_empty_after_rebase() {
     DRY_RUN=false \
       UPSTREAM_BRANCH=main \
       FORK_MAIN=main \
-      FORK_UPSTREAM_BRANCH=upstream \
+      FORK_BASE_BRANCH=base \
       bash "$ROOT_DIR/scripts/workflow/rebase.sh"
 
     main_subject=$(git log -1 --format=%s main)
@@ -309,7 +309,7 @@ scenario_preserve_base_commits() {
     git update-ref refs/remotes/upstream/main "$(git rev-parse main)"
     DRY_RUN=false \
       UPSTREAM_BRANCH=main \
-      FORK_UPSTREAM_BRANCH=upstream \
+      FORK_BASE_BRANCH=base \
       bash "$ROOT_DIR/scripts/workflow/sync-upstream-branch.sh"
 
     git checkout -q main
@@ -339,7 +339,7 @@ scenario_preserve_base_commits() {
     DRY_RUN=false \
       UPSTREAM_BRANCH=main \
       FORK_MAIN=main \
-      FORK_UPSTREAM_BRANCH=upstream \
+      FORK_BASE_BRANCH=base \
       bash "$ROOT_DIR/scripts/workflow/rebase.sh"
 
     subjects=$(git log --format=%s --max-count=2 main)
