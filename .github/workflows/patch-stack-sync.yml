@@ -80,6 +80,16 @@ on:
         required: false
         type: boolean
         default: false
+      runner:
+        description: >-
+          JSON runs-on value for the sync job — a quoted label string, or a JSON
+          array of labels for a self-hosted pool. A reusable workflow draws
+          runners from the CALLING repo, so pass the labels that repo registers,
+          e.g. ''["self-hosted", "linux", "x64", "taffy"]''. Defaults to the
+          GitHub-hosted runner, which is billed per minute.
+        required: false
+        type: string
+        default: '"ubuntu-latest"'
     secrets:
       app_id:
         description: 'GitHub App ID (for generating a token with cross-repo PR write access)'
@@ -96,7 +106,11 @@ permissions:
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    # fromJSON so one string input can carry either a single label
+    # ('"ubuntu-latest"') or a self-hosted label array. Callers on a free
+    # self-hosted pool pass their own labels; the default keeps every existing
+    # caller on GitHub-hosted with no change required.
+    runs-on: ${{ fromJSON(inputs.runner) }}
     timeout-minutes: 60
     steps:
       # ── Auth ──────────────────────────────────────────────────────────────
