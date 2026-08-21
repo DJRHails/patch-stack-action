@@ -227,6 +227,9 @@ jobs:
         shell: bash
         env:
           DRY_RUN: ${{ inputs.dry_run }}
+          UPSTREAM_REPO: ${{ inputs.upstream_repo }}
+          UPSTREAM_GH_TOKEN: ${{ steps.upstream-token.outputs.token }}
+          GH_TOKEN: ${{ steps.fork-token.outputs.token }}
           UPSTREAM_BRANCH: ${{ inputs.upstream_branch }}
           UPSTREAM_TAG_PATTERN: ${{ inputs.upstream_tag_pattern }}
           UPSTREAM_COMMIT_OVERRIDE: ${{ inputs.upstream_commit_override }}
