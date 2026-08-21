@@ -212,9 +212,12 @@ jobs:
             || git remote set-url upstream "${upstream_url}"
 
           git fetch upstream "$UPSTREAM_BRANCH" --quiet
-          # Fetch tags only when tag pinning is configured
+          # Fetch tags only when tag pinning is configured. --force: a fork's
+          # own release tags can collide by name with tags upstream mints later
+          # (e.g. both cut v1.2.3-1); upstream owns the tag namespace during
+          # sync, and an un-forced fetch dies with "would clobber existing tag".
           if [[ -n "${UPSTREAM_TAG_PATTERN}" ]]; then
-            git fetch upstream --tags --quiet
+            git fetch upstream --tags --force --quiet
           fi
           # Fetch all patch/* branches from origin into local tracking branches
           git fetch origin '+refs/heads/patch/*:refs/heads/patch/*' --quiet 2>/dev/null || true
