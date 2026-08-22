@@ -91,12 +91,15 @@ on:
         type: string
         default: '"ubuntu-latest"'
     secrets:
+      fork_token:
+        description: 'Pre-provisioned token with write access to the fork (GitHub App installation token, PAT, or OIDC-federated token such as one from Octo STS). Takes precedence over app_id/app_private_key when set.'
+        required: false
       app_id:
         description: 'GitHub App ID (for generating a token with cross-repo PR write access)'
-        required: true
+        required: false
       app_private_key:
         description: 'GitHub App private key'
-        required: true
+        required: false
       claude_code_oauth_token:
         description: 'Claude Code OAuth token (Pro/Max subscription). Generate with: claude setup-token'
         required: true
@@ -114,11 +117,17 @@ jobs:
     timeout-minutes: 60
     steps:
       # ── Auth ──────────────────────────────────────────────────────────────
-      # Use a GitHub App token for fork access rather than GITHUB_TOKEN or OIDC so that:
+      # Fork auth resolves in this order:
+      # 1. `fork_token` secret — any pre-provisioned token with write access to
+      #    the fork (installation token, PAT, or minted by the caller via OIDC
+      #    federation, e.g. Octo STS)
+      # 2. `app_id` + `app_private_key` — a GitHub App token is generated here.
+      #    Prefer an App (or an App-issued token) over GITHUB_TOKEN or raw OIDC:
       # 1. Pushes made here can trigger other workflows (GITHUB_TOKEN can't)
       # 2. We can fetch/push the fork even when it is private
-      # 3. Cron jobs work — OIDC token exchange fails on scheduled runs
-      #    (see https://github.com/anthropics/claude-code-action/issues/814)
+      # 3. Cron jobs work — claude-code-action's OIDC exchange fails on
+      #    scheduled runs (see anthropics/claude-code-action#814); passing a
+      #    pre-generated App-grade token as github_token bypasses it entirely
       - name: Parse repository coordinates
         id: repos
         shell: bash
@@ -138,8 +147,27 @@ jobs:
             echo "action_ref=${WORKFLOW_REF##*@}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Resolve fork auth mode
+        id: fork-auth
+        shell: bash
+        env:
+          FORK_TOKEN: ${{ secrets.fork_token }}
+          APP_ID: ${{ secrets.app_id }}
+          APP_PRIVATE_KEY: ${{ secrets.app_private_key }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${FORK_TOKEN}" ]]; then
+            echo "mode=token" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${APP_ID}" && -n "${APP_PRIVATE_KEY}" ]]; then
+            echo "mode=app" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::No fork credentials resolved: provide the fork_token secret, or both app_id and app_private_key"
+            exit 1
+          fi
+
       - name: Generate fork GitHub App token
-        id: fork-token
+        id: fork-app-token
+        if: steps.fork-auth.outputs.mode == 'app'
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547  # v1.12.0
         with:
           app-id: ${{ secrets.app_id }}
@@ -147,9 +175,24 @@ jobs:
           owner: ${{ steps.repos.outputs.fork_owner }}
           repositories: ${{ steps.repos.outputs.fork_name }}
 
+      - name: Select fork token
+        id: fork-token
+        shell: bash
+        env:
+          PREPROVISIONED: ${{ secrets.fork_token }}
+          APP_TOKEN: ${{ steps.fork-app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PREPROVISIONED}" && -z "${APP_TOKEN}" ]]; then
+            echo "::error::Fork token unavailable despite app credentials being set — check create-github-app-token step above"
+            exit 1
+          fi
+          echo "token=${PREPROVISIONED:-${APP_TOKEN}}" >> "$GITHUB_OUTPUT"
+
       - name: Generate upstream GitHub App token
         id: upstream-token
         continue-on-error: true
+        if: steps.fork-auth.outputs.mode == 'app'
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547  # v1.12.0
         with:
           app-id: ${{ secrets.app_id }}
