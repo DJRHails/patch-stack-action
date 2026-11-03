@@ -7,6 +7,7 @@
 #   bash scripts/dev/local-simulations.sh rename    # run one scenario
 #   bash scripts/dev/local-simulations.sh collapse  # run one scenario
 #   bash scripts/dev/local-simulations.sh preserve  # run one scenario
+#   bash scripts/dev/local-simulations.sh release-tag  # run one scenario
 
 set -euo pipefail
 
@@ -316,7 +317,7 @@ scenario_preserve_base_commits() {
     mkdir -p .github/workflows
     printf 'name: Patch Stack Sync\n' > .github/workflows/patch-stack-sync.yml
     git add .github/workflows/patch-stack-sync.yml
-    git commit -q -m 'chore: add sync workflow'
+    git commit -q -m 'fork: add sync workflow'
 
     printf 'base\nfeature\n' > app.txt
     git add app.txt
@@ -343,7 +344,7 @@ scenario_preserve_base_commits() {
       bash "$ROOT_DIR/scripts/workflow/rebase.sh"
 
     subjects=$(git log --format=%s --max-count=2 main)
-    expected_subjects=$'patch-stack: Feature patch (#7)\nchore: add sync workflow'
+    expected_subjects=$'patch-stack: Feature patch (#7)\nfork: add sync workflow'
     assert_eq "$expected_subjects" "$subjects" "main should preserve base commit and regenerate patch commit with reserved prefix"
 
     patch_body=$(git log -1 --format=%B main)
@@ -357,15 +358,92 @@ scenario_preserve_base_commits() {
     assert_line_count 1 "$preserved" "only the direct main commit should be preserved"
 
     preserved_subject=$(git log -1 --format=%s "$(cat /tmp/preserved_main_commits.txt)")
-    assert_eq 'chore: add sync workflow' "$preserved_subject" "legacy patch rebuild commit should not be preserved"
+    assert_eq 'fork: add sync workflow' "$preserved_subject" "legacy patch rebuild commit should not be preserved"
   )
 
   pass "preserve"
   SCENARIOS_RAN=$((SCENARIOS_RAN + 1))
 }
 
+scenario_release_tag_base() {
+  info "release-tag: moving base between off-main release tags replays only the patch"
+  reset_tmp_state
+
+  local work_dir fake_bin
+  mapfile -t repo_info < <(create_repo release-tag)
+  work_dir="${repo_info[0]}"
+  fake_bin="${repo_info[1]}"
+
+  (
+    cd "$work_dir"
+    printf '0.1.0-dev\n' > version.txt
+    git add version.txt
+    git commit -q -m 'start version tracking'
+    git push -q origin HEAD:main
+
+    git checkout -q -b release-1 main
+    printf '1.0.0\n' > version.txt
+    git commit -qam 'chore(release): prepare 1.0.0'
+    git tag v1.0.0
+
+    git checkout -q main
+    printf '1.1.0-dev\n' > version.txt
+    git commit -qam 'chore: open 1.1 development'
+    printf 'base\nupstream\n' > upstream.txt
+    git add upstream.txt
+    git commit -q -m 'feat: upstream work after 1.0.0'
+    git checkout -q -b release-2 main
+    printf '2.0.0\n' > version.txt
+    git commit -qam 'chore(release): prepare 2.0.0'
+    git tag v2.0.0
+
+    git checkout -q main
+    git update-ref refs/remotes/upstream/main "$(git rev-parse main)"
+    git push -q --force origin 'v1.0.0^{commit}:refs/heads/base'
+    git fetch -q origin base:base
+
+    git checkout -q -b patch/feature base
+    printf 'base\nfeature\n' > app.txt
+    git commit -qam 'feat: patch feature'
+    git push -q origin HEAD
+
+    git branch -f base v2.0.0
+    git push -q --force origin base
+
+    printf 'patch/feature\n' > /tmp/active_branches.txt
+    printf 'patch/feature\n' > /tmp/sorted_branches.txt
+    printf 'Feature patch\n' > /tmp/meta_title_patch_feature
+    printf '9\n' > /tmp/meta_num_patch_feature
+    printf 'https://example.test/pr/9\n' > /tmp/meta_url_patch_feature
+    printf 'PR body\n' > /tmp/meta_body_patch_feature
+
+    : > "$GITHUB_OUTPUT"
+    PATH="$fake_bin:$PATH" \
+      DRY_RUN=false \
+      UPSTREAM_BRANCH=main \
+      FORK_MAIN=main \
+      FORK_BASE_BRANCH=base \
+      bash "$ROOT_DIR/scripts/workflow/rebase.sh"
+
+    needs_claude=$(sed -n 's/^needs_claude=//p' "$GITHUB_OUTPUT")
+    assert_eq 'false' "$needs_claude" "release-branch commits of the old base must not cause conflicts"
+
+    patch_commits=$(git log --format=%s base..patch/feature)
+    assert_eq 'feat: patch feature' "$patch_commits" "rebased patch should carry only its own commit"
+
+    assert_eq '2.0.0' "$(git show main:version.txt)" "main should keep the new release's version"
+    assert_eq $'base\nfeature' "$(git show main:app.txt)" "main should carry the patch change"
+  )
+
+  pass "release-tag"
+  SCENARIOS_RAN=$((SCENARIOS_RAN + 1))
+}
+
 run_named_scenario() {
   case "$1" in
+    release-tag)
+      scenario_release_tag_base
+      ;;
     rename)
       scenario_rename_descendant
       ;;
@@ -383,6 +461,7 @@ run_named_scenario() {
       scenario_collapse_multi_level
       scenario_empty_after_rebase
       scenario_preserve_base_commits
+      scenario_release_tag_base
       ;;
     *)
       fail "unknown scenario: $1"

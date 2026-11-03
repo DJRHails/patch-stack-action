@@ -331,6 +331,7 @@ jobs:
             {
               "branch":            "patch/foo--bar",
               "parent":            "patch/foo",
+              "fork_point":        "<sha>",  // commit the patch was built on; "" if none
               "conflicting_files": ["src/index.ts"],
               "pr_url":            "https://github.com/.../pull/42",
               "pr_title":          "Add bar feature",
@@ -399,7 +400,10 @@ jobs:
 
                **RESOLVE** — genuine conflict, both changes should coexist:
                  a. `git checkout <branch>`
-                 b. `git rebase <parent>` — conflict markers will appear
+                 b. `git rebase --onto <parent> <fork_point>` (or `git rebase <parent>`
+                    when `fork_point` is empty) — conflict markers will appear. Use the
+                    `--onto` form: it replays only the patch's own commits, not the old
+                    base's release-branch commits.
                  c. Resolve each file: preserve upstream's approach, adapt patch on top.
                     Use the PR description as the source of truth for intent.
                  d. `git add <resolved files>`
