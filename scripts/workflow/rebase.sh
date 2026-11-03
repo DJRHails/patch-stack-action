@@ -148,12 +148,29 @@ replay_preserved_main_commits() {
   done < /tmp/preserved_main_commits.txt
 }
 
+# Print the commit a patch branch was built on: the parent of its oldest commit
+# that is neither in its parent branch nor reachable from upstream (branch or
+# any tag). A plain `git rebase <parent>` replays everything after the merge
+# base instead, and when base was pinned to a release tag cut off upstream's
+# branch, that includes the old release's own commits (version bumps across
+# every package). Those collide with each newer release and bury the patch's
+# real conflicts. Prints nothing when the patch has no commits of its own.
+patch_fork_point() {
+  local branch="$1" parent="$2"
+  local oldest
+  oldest=$(git rev-list --reverse --topo-order "$branch" --not "$parent" \
+    "refs/remotes/upstream/${UPSTREAM_BRANCH}" --tags | awk 'NR == 1')
+  [[ -n "$oldest" ]] || return 0
+  git rev-parse --verify --quiet "${oldest}^" || true
+}
+
 add_conflict() {
   local branch="$1" parent="$2" files="$3"
-  local pr_url="$4" pr_title="$5" pr_body="$6"
+  local pr_url="$4" pr_title="$5" pr_body="$6" fork_point="$7"
   jq --arg b "$branch" --arg p "$parent" --arg f "$files" \
      --arg u "$pr_url" --arg t "$pr_title" --arg d "$pr_body" \
-     '. += [{branch:$b, parent:$p,
+     --arg fp "$fork_point" \
+     '. += [{branch:$b, parent:$p, fork_point:$fp,
               conflicting_files:($f|split("\n")|map(select(.!=""))),
               pr_url:$u, pr_title:$t, pr_body:$d}]' \
      /tmp/conflicts.json > /tmp/conflicts.tmp \
@@ -179,7 +196,13 @@ while IFS= read -r branch || [[ -n "$branch" ]]; do
     continue
   fi
 
-  if git rebase "$parent" --quiet 2>/tmp/rebase_err.txt; then
+  fork_point=$(patch_fork_point "$branch" "$parent")
+  rebase_args=("$parent")
+  if [[ -n "$fork_point" ]]; then
+    rebase_args=(--onto "$parent" "$fork_point")
+  fi
+
+  if git rebase "${rebase_args[@]}" --quiet 2>/tmp/rebase_err.txt; then
     echo "  Clean -- pushing"
     git push --force-with-lease origin "$branch" --quiet
   else
@@ -187,7 +210,7 @@ while IFS= read -r branch || [[ -n "$branch" ]]; do
     needs_claude=true
     files=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
     add_conflict "$branch" "$parent" "$files" \
-      "$pr_url" "$pr_title" "$pr_body"
+      "$pr_url" "$pr_title" "$pr_body" "$fork_point"
     git rebase --abort 2>/dev/null || true
   fi
 done < /tmp/sorted_branches.txt
