@@ -317,7 +317,7 @@ scenario_preserve_base_commits() {
     mkdir -p .github/workflows
     printf 'name: Patch Stack Sync\n' > .github/workflows/patch-stack-sync.yml
     git add .github/workflows/patch-stack-sync.yml
-    git commit -q -m 'chore: add sync workflow'
+    git commit -q -m 'fork: add sync workflow'
 
     printf 'base\nfeature\n' > app.txt
     git add app.txt
@@ -344,7 +344,7 @@ scenario_preserve_base_commits() {
       bash "$ROOT_DIR/scripts/workflow/rebase.sh"
 
     subjects=$(git log --format=%s --max-count=2 main)
-    expected_subjects=$'patch-stack: Feature patch (#7)\nchore: add sync workflow'
+    expected_subjects=$'patch-stack: Feature patch (#7)\nfork: add sync workflow'
     assert_eq "$expected_subjects" "$subjects" "main should preserve base commit and regenerate patch commit with reserved prefix"
 
     patch_body=$(git log -1 --format=%B main)
@@ -358,7 +358,7 @@ scenario_preserve_base_commits() {
     assert_line_count 1 "$preserved" "only the direct main commit should be preserved"
 
     preserved_subject=$(git log -1 --format=%s "$(cat /tmp/preserved_main_commits.txt)")
-    assert_eq 'chore: add sync workflow' "$preserved_subject" "legacy patch rebuild commit should not be preserved"
+    assert_eq 'fork: add sync workflow' "$preserved_subject" "legacy patch rebuild commit should not be preserved"
   )
 
   pass "preserve"
